@@ -1,0 +1,20 @@
+# 编译产物
+build/
+curldrop
+curldrop.exe
+
+# 上传的文件目录
+uploads/
+
+# 环境配置
+.env
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db

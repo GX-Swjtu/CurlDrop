@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CurlDrop - 文件传输</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background: #f5f5f5; color: #333; line-height: 1.6;
+        }
+        .container { max-width: 900px; margin: 0 auto; padding: 20px; }
+        h1 { text-align: center; margin: 20px 0; color: #1a1a1a; font-size: 1.8em; }
+        h1 span { color: #0066cc; }
+
+        /* 上传区域 */
+        .upload-zone {
+            border: 2px dashed #ccc; border-radius: 12px; padding: 40px 20px;
+            text-align: center; cursor: pointer; transition: all 0.3s;
+            background: #fff; margin-bottom: 24px;
+        }
+        .upload-zone:hover, .upload-zone.dragover {
+            border-color: #0066cc; background: #f0f7ff;
+        }
+        .upload-zone p { color: #666; margin: 8px 0; }
+        .upload-zone .icon { font-size: 48px; color: #ccc; }
+        .upload-zone.dragover .icon { color: #0066cc; }
+
+        /* 进度条 */
+        .progress-wrap { display: none; margin: 16px 0; }
+        .progress-bar {
+            height: 6px; background: #e0e0e0; border-radius: 3px; overflow: hidden;
+        }
+        .progress-fill {
+            height: 100%; width: 0; background: #0066cc; transition: width 0.2s;
+        }
+        .progress-text { text-align: center; font-size: 14px; color: #666; margin-top: 6px; }
+
+        /* 文件列表 */
+        .file-list { background: #fff; border-radius: 12px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+        .file-header {
+            display: grid; grid-template-columns: 1fr 100px 160px 140px;
+            padding: 12px 16px; background: #fafafa; border-bottom: 1px solid #eee;
+            font-weight: 600; font-size: 14px; color: #666;
+        }
+        .file-item {
+            display: grid; grid-template-columns: 1fr 100px 160px 140px;
+            padding: 10px 16px; border-bottom: 1px solid #f0f0f0;
+            align-items: center; font-size: 14px;
+        }
+        .file-item:last-child { border-bottom: none; }
+        .file-item:hover { background: #f8f9fa; }
+        .file-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .file-size { color: #888; }
+        .file-date { color: #888; }
+        .file-actions { display: flex; gap: 6px; }
+        .btn {
+            padding: 4px 10px; border: none; border-radius: 4px; cursor: pointer;
+            font-size: 12px; text-decoration: none; display: inline-block;
+            transition: opacity 0.2s;
+        }
+        .btn:hover { opacity: 0.8; }
+        .btn-dl { background: #0066cc; color: #fff; }
+        .btn-play { background: #28a745; color: #fff; }
+        .btn-del { background: #dc3545; color: #fff; }
+
+        .empty { text-align: center; padding: 40px; color: #999; }
+        .status { text-align: center; padding: 10px; color: #28a745; font-size: 14px; display: none; }
+
+        /* 视频播放器 */
+        .video-modal {
+            display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.85); z-index: 100; align-items: center; justify-content: center;
+        }
+        .video-modal.active { display: flex; }
+        .video-modal video { max-width: 90%; max-height: 90%; border-radius: 8px; }
+        .video-close {
+            position: fixed; top: 20px; right: 20px; color: #fff; font-size: 32px;
+            cursor: pointer; z-index: 101; background: none; border: none;
+        }
+
+        @media (max-width: 640px) {
+            .file-header, .file-item {
+                grid-template-columns: 1fr 80px 80px;
+            }
+            .file-date { display: none; }
+            .container { padding: 10px; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1><span>Curl</span>Drop</h1>
+
+        <!-- 上传区域 -->
+        <div class="upload-zone" id="dropZone">
+            <div class="icon">&#128230;</div>
+            <p>拖拽文件到此处，或点击选择文件</p>
+            <p style="font-size:12px;color:#999">支持多文件上传，无大小限制</p>
+            <input type="file" id="fileInput" multiple style="display:none">
+        </div>
+
+        <!-- 上传进度 -->
+        <div class="progress-wrap" id="progressWrap">
+            <div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div>
+            <div class="progress-text" id="progressText">上传中...</div>
+        </div>
+
+        <!-- 状态消息 -->
+        <div class="status" id="statusMsg"></div>
+
+        <!-- 文件列表 -->
+        <div class="file-list" id="fileList">
+            <div class="file-header">
+                <span>文件名</span>
+                <span>大小</span>
+                <span>修改时间</span>
+                <span>操作</span>
+            </div>
+            <div id="fileBody">
+                <div class="empty">加载中...</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 视频播放弹窗 -->
+    <div class="video-modal" id="videoModal">
+        <button class="video-close" id="videoClose">&times;</button>
+        <video id="videoPlayer" controls></video>
+    </div>
+
+    <script>
+    (function() {
+        const dropZone = document.getElementById('dropZone');
+        const fileInput = document.getElementById('fileInput');
+        const progressWrap = document.getElementById('progressWrap');
+        const progressFill = document.getElementById('progressFill');
+        const progressText = document.getElementById('progressText');
+        const statusMsg = document.getElementById('statusMsg');
+        const fileBody = document.getElementById('fileBody');
+        const videoModal = document.getElementById('videoModal');
+        const videoPlayer = document.getElementById('videoPlayer');
+
+        // 获取当前页面的认证信息（从 URL 中提取或使用浏览器缓存的凭据）
+        function getAuthHeader() {
+            // 浏览器已经通过 Basic Auth 认证，后续请求会自动携带凭据
+            return {};
+        }
+
+        // 格式化文件大小
+        function formatSize(bytes) {
+            if (bytes === 0) return '0 B';
+            const k = 1024;
+            const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return (bytes / Math.pow(k, i)).toFixed(1) + ' ' + sizes[i];
+        }
+
+        // 格式化日期
+        function formatDate(dateStr) {
+            const d = new Date(dateStr);
+            return d.getFullYear() + '-' +
+                String(d.getMonth()+1).padStart(2,'0') + '-' +
+                String(d.getDate()).padStart(2,'0') + ' ' +
+                String(d.getHours()).padStart(2,'0') + ':' +
+                String(d.getMinutes()).padStart(2,'0');
+        }
+
+        // 判断是否为视频文件
+        function isVideo(name) {
+            return /\.(mp4|webm|ogg|ogv|mkv|avi|mov)$/i.test(name);
+        }
+
+        // 显示状态消息
+        function showStatus(msg) {
+            statusMsg.textContent = msg;
+            statusMsg.style.display = 'block';
+            setTimeout(() => { statusMsg.style.display = 'none'; }, 3000);
+        }
+
+        // 加载文件列表
+        function loadFiles() {
+            fetch('/api/files', { credentials: 'include' })
+                .then(r => r.json())
+                .then(files => {
+                    if (files.length === 0) {
+                        fileBody.innerHTML = '<div class="empty">暂无文件</div>';
+                        return;
+                    }
+                    // 按修改时间倒序排列
+                    files.sort((a, b) => new Date(b.modified) - new Date(a.modified));
+                    fileBody.innerHTML = files.map(f => {
+                        let actions = `<a class="btn btn-dl" href="/download?filename=${encodeURIComponent(f.name)}">下载</a>`;
+                        if (isVideo(f.name)) {
+                            actions += ` <button class="btn btn-play" onclick="playVideo('${f.name.replace(/'/g, "\\'")}')">播放</button>`;
+                        }
+                        actions += ` <button class="btn btn-del" onclick="deleteFile('${f.name.replace(/'/g, "\\'")}')">删除</button>`;
+                        return `<div class="file-item">
+                            <span class="file-name" title="${f.name}">${f.name}</span>
+                            <span class="file-size">${f.is_dir ? '-' : formatSize(f.size)}</span>
+                            <span class="file-date">${formatDate(f.modified)}</span>
+                            <span class="file-actions">${actions}</span>
+                        </div>`;
+                    }).join('');
+                })
+                .catch(() => {
+                    fileBody.innerHTML = '<div class="empty">加载失败</div>';
+                });
+        }
+
+        // 上传文件
+        function uploadFiles(files) {
+            if (files.length === 0) return;
+
+            const formData = new FormData();
+            for (const f of files) {
+                formData.append('file', f);
+            }
+
+            const xhr = new XMLHttpRequest();
+            xhr.open('POST', '/upload');
+            xhr.withCredentials = true;
+
+            progressWrap.style.display = 'block';
+            progressFill.style.width = '0%';
+
+            xhr.upload.onprogress = function(e) {
+                if (e.lengthComputable) {
+                    const pct = Math.round(e.loaded / e.total * 100);
+                    progressFill.style.width = pct + '%';
+                    progressText.textContent = pct + '% - ' + formatSize(e.loaded) + ' / ' + formatSize(e.total);
+                }
+            };
+
+            xhr.onload = function() {
+                progressWrap.style.display = 'none';
+                if (xhr.status === 200) {
+                    showStatus('上传成功');
+                    loadFiles();
+                } else {
+                    showStatus('上传失败: ' + xhr.responseText);
+                }
+            };
+
+            xhr.onerror = function() {
+                progressWrap.style.display = 'none';
+                showStatus('上传失败: 网络错误');
+            };
+
+            xhr.send(formData);
+        }
+
+        // 删除文件
+        window.deleteFile = function(name) {
+            if (!confirm('确定删除 ' + name + '？')) return;
+            const formData = new FormData();
+            formData.append('filename', name);
+            fetch('/api/delete', {
+                method: 'POST',
+                body: formData,
+                credentials: 'include'
+            }).then(r => {
+                if (r.ok) {
+                    showStatus(name + ' 已删除');
+                    loadFiles();
+                } else {
+                    r.text().then(t => showStatus('删除失败: ' + t));
+                }
+            });
+        };
+
+        // 播放视频
+        window.playVideo = function(name) {
+            videoPlayer.src = '/video?filename=' + encodeURIComponent(name);
+            videoModal.classList.add('active');
+            videoPlayer.play();
+        };
+
+        // 关闭视频
+        document.getElementById('videoClose').onclick = function() {
+            videoModal.classList.remove('active');
+            videoPlayer.pause();
+            videoPlayer.src = '';
+        };
+        videoModal.onclick = function(e) {
+            if (e.target === videoModal) {
+                videoModal.classList.remove('active');
+                videoPlayer.pause();
+                videoPlayer.src = '';
+            }
+        };
+
+        // 拖拽上传
+        dropZone.onclick = () => fileInput.click();
+        fileInput.onchange = () => uploadFiles(fileInput.files);
+
+        dropZone.ondragover = function(e) {
+            e.preventDefault();
+            dropZone.classList.add('dragover');
+        };
+        dropZone.ondragleave = function() {
+            dropZone.classList.remove('dragover');
+        };
+        dropZone.ondrop = function(e) {
+            e.preventDefault();
+            dropZone.classList.remove('dragover');
+            uploadFiles(e.dataTransfer.files);
+        };
+
+        // 初始加载
+        loadFiles();
+    })();
+    </script>
+</body>
+</html>
