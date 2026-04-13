@@ -1,5 +1,7 @@
 # CurlDrop
 
+[![CI](https://github.com/GaoXinLXL/CurlDrop/actions/workflows/ci.yml/badge.svg)](https://github.com/GaoXinLXL/CurlDrop/actions/workflows/ci.yml)
+
 轻量级文件传输工具，专为 `curl` 设计，同时提供 Web 界面。单文件二进制，零依赖部署。
 
 ## 功能特性
