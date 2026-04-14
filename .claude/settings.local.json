@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(go mod:*)",
+      "Bash(go get:*)",
+      "Bash(rm netdisk.go)",
+      "Bash(go build:*)",
+      "Bash(go vet:*)",
+      "Bash(rm -f curldrop.exe)",
+      "Bash(make build:*)",
+      "Bash(go test:*)",
+      "Bash(go tool:*)",
+      "Bash(git commit -m ':*)"
+    ]
+  }
+}

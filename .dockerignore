@@ -1,0 +1,13 @@
+.git
+.github
+.idea
+.claude
+build/
+data/
+*.exe
+curldrop
+coverage.out
+.env
+.env.*
+!.env.example
+*_test.go

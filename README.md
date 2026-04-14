@@ -116,7 +116,7 @@ docker run -d -p 8080:8080 -v ./data:/data curldrop
 ## 从源码构建
 
 ```bash
-# 需要 Go 1.22+
+# 需要 Go 1.26+
 go build -o curldrop .
 
 # 优化构建（减小体积）
